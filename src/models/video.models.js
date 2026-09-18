@@ -17,11 +17,11 @@ const videoSchema = new Schema(
     },
     duration: {
       type: Number,
-      default: 0,
+      
     },
     views: [
       {
-        type: mongoose.Types.Schema.ObjectId,
+        type: mongoose.Schema.Types.ObjectId,
         ref: "User",
       },
     ],
