@@ -53,8 +53,8 @@ const registerUser = asyncHandler(async (req, res) => {
 
   // upload avatar and coverImage to cloudinary
 
-  const avatar = await uploadOnCloudinary(avatarLocalPath);
-  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+  const avatar = await uploadOnCloudinary(avatarLocalPath, "image");
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath, "image");
 
   // console.log(avatar);
 
@@ -309,7 +309,7 @@ const updateAvatarImage = asyncHandler(async (req, res) => {
     const avatarFilePath = req.file?.path;
 
     // uploading new avatar image to cloudinary
-    const response = await uploadOnCloudinary(avatarFilePath);
+    const response = await uploadOnCloudinary(avatarFilePath, "image");
 
     // updating user with new avatar image url
     const userWithUpdatedAvatar = await User.findByIdAndUpdate(
