@@ -1,4 +1,5 @@
 import {v2 as cloudinary} from "cloudinary"
+import { publicDecrypt } from "crypto";
 import fs from "fs"
 
 cloudinary.config({
@@ -29,4 +30,19 @@ const uploadOnCloudinary = async(localFilePath) => {
     }
 }
 
-export {uploadOnCloudinary}
+const deleteFromCloudinary = async(pubilcId) => {
+    try {
+        if(!pubilcId) return null;
+        const response = await cloudinary.uploader.destroy(pubilcId)
+        
+        // just checking what does cloudinary sends in response 
+        console.log(response);
+
+        return response;
+
+    } catch (error) {
+        console.log(error);
+    }
+}
+
+export {uploadOnCloudinary,deleteFromCloudinary}

@@ -1,9 +1,13 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
-import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import {
+  deleteFromCloudinary,
+  uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 import { User } from "../models/user.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
 import jwt from "jsonwebtoken";
+import { getPublicIdFromUrl } from "../utils/publicIdFromUrl.js";
 
 const generateAccessAndRefreshToken = async (userId) => {
   const user = await User.findById(userId);
@@ -87,9 +91,7 @@ const loginUser = asyncHandler(async (req, res) => {
   // get user details
   const { username, email, password } = req.body;
 
-  if (
-    [username, email, password].some((field) => !field || field.trim() === "")
-  ) {
+  if ([username, email, password].some((field) => field.trim() === "")) {
     throw new ApiError(400, "Username, email, and password are all required");
   }
 
@@ -222,10 +224,9 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
   }
 
   const isPasswordCorrect = await currentUser.isPasswordCorrect(oldPassword);
-   
-  
-  if(!isPasswordCorrect){
-    throw new ApiError(400,"Incorrect Password");
+
+  if (!isPasswordCorrect) {
+    throw new ApiError(400, "Incorrect Password");
   }
 
   currentUser.password = newPassword;
@@ -237,6 +238,114 @@ const changeCurrentPassword = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, {}, "password changed successfully"));
 });
 
+const updateUserInfo = asyncHandler(async (req, res) => {
+  // get user details which you wanna change
+  const { username, email, fullName } = req.body;
 
+  // checking whether we have all the fields or not
+  if ([username, email, fullName].some((field) => field?.trim() === "")) {
+    throw new ApiError(400, "All fields are required");
+  }
 
-export { registerUser, loginUser, logoutUser, refreshAccessToken,changeCurrentPassword};
+  // fetching current user from req.user
+  try {
+    const user = await User.findById(req.user?._id);
+
+    if (!user) {
+      throw new ApiError(
+        404,
+        "User not found :: while updating the user details"
+      );
+    }
+
+    const updatedUserDetails = await User.findByIdAndUpdate(user?._id, {
+      $set: {
+        username,
+        email,
+        fullName,
+      },
+      returnDocument: "after",
+    }).select("-password -refreshToken");
+
+    return res
+      .status(202)
+      .json(
+        new ApiResponse(
+          202,
+          updatedUserDetails,
+          "User details updated successfully"
+        )
+      );
+  } catch (error) {
+    console.log(
+      "Something went wrong :: userController.js -> update user details"
+    );
+    throw new ApiError(500, error?.message || "Something went wrong");
+  }
+});
+
+const updateAvatarImage = asyncHandler(async (req, res) => {
+  // get the avatar file
+  const avatar = req.file;
+
+  // checking if avatar file exists or not
+  if (!avatar) {
+    throw new ApiError(403, "avatar file is required");
+  }
+
+  try {
+    // querying user using req.user_id
+    const user = await User.findById(req.user?._id);
+
+    // checking if user exists or not
+    if (!user) {
+      throw new ApiError(404, "User not found");
+    }
+
+    // deleting file from cloudinary using pubilc id
+    await deleteFromCloudinary(getPublicIdFromUrl(user?.avatar));
+
+    // file path of file
+    const avatarFilePath = req.file?.path;
+
+    // uploading new avatar image to cloudinary
+    const response = await uploadOnCloudinary(avatarFilePath);
+
+    // updating user with new avatar image url
+    const userWithUpdatedAvatar = await User.findByIdAndUpdate(
+      user?._id,
+      {
+        $set: { avatar: response.url },
+      },
+      { new: true }
+    ).select("-password -refreshToken");
+
+    // checking for safety
+    if (!userWithUpdatedAvatar) {
+      throw new ApiError(500, "Something went wrong during updation");
+    }
+
+    // returing response with updatedAvatar user
+    return res
+      .status(202)
+      .json(
+        new ApiResponse(
+          202,
+          userWithUpdatedAvatar,
+          "Avatar Updated Successfully"
+        )
+      );
+  } catch (error) {
+    throw new ApiError(500, error?.message);
+  }
+});
+
+export {
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshAccessToken,
+  changeCurrentPassword,
+  updateUserInfo,
+  updateAvatarImage,
+};
