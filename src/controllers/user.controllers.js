@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 import { User } from "../models/user.models.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
+import jwt from "jsonwebtoken";
 
 const generateAccessAndRefreshToken = async (userId) => {
   const user = await User.findById(userId);
@@ -113,6 +114,7 @@ const loginUser = asyncHandler(async (req, res) => {
   const options = {
     httpOnly: true,
     secure: true,
+    path: "/",
   };
 
   return res
@@ -146,13 +148,55 @@ const logoutUser = asyncHandler(async (req, res) => {
   const options = {
     httpOnly: true,
     secure: true,
+    path: "/",
   };
 
   return res
     .status(200)
     .clearCookie("accessToken", options)
     .clearCookie("refreshToken", options)
-    .json(new ApiResponse(200, "user logged out successfully"));
+    .json(new ApiResponse(200, null, "user logged out successfully"));
+  ``;
 });
 
-export { registerUser, loginUser, logoutUser };
+const refreshAccessToken = asyncHandler(async (req, res) => {
+  // get refresh token from browers
+  const browserSavedRefreshToken =
+    req.cookies?.refreshToken || req.body.refreshToken;
+
+  if (!browserSavedRefreshToken) {
+    throw new ApiError(401, "Refresh Token is used or expired");
+  }
+
+  const decodedToken = await jwt.verify(
+    browserSavedRefreshToken,
+    process.env.REFRESH_TOKEN_SECRET
+  );
+
+  const user = await User.findById(decodedToken?._id);
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  if (browserSavedRefreshToken !== user?.refreshToken) {
+    throw new ApiError(401, "Refresh token is expired or used");
+  }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
+    user?._id
+  );
+
+  const options = {
+    httpOnly : true,
+    secure : true
+  }
+
+  return res
+    .status(200)
+    .cookie("accessToken", accessToken,options)
+    .cookie("refreshToken", refreshToken,options)
+    .json(new ApiResponse(200, {}, "Access token refreshed"));
+});
+
+export { registerUser, loginUser, logoutUser, refreshAccessToken };
