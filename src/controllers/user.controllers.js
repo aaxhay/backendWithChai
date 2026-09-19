@@ -164,39 +164,79 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
   const browserSavedRefreshToken =
     req.cookies?.refreshToken || req.body.refreshToken;
 
+  // checking if the token is there or not
   if (!browserSavedRefreshToken) {
     throw new ApiError(401, "Refresh Token is used or expired");
   }
 
+  // decoding and fetching the payload in that token
   const decodedToken = await jwt.verify(
     browserSavedRefreshToken,
     process.env.REFRESH_TOKEN_SECRET
   );
 
+  // querying database to get user from token information or payload
   const user = await User.findById(decodedToken?._id);
 
+  //checking if user exists or not
   if (!user) {
     throw new ApiError(404, "User not found");
   }
 
+  // checking if the token from browser is equals to the database saved token or not
   if (browserSavedRefreshToken !== user?.refreshToken) {
     throw new ApiError(401, "Refresh token is expired or used");
   }
 
+  // generating both tokens
   const { accessToken, refreshToken } = await generateAccessAndRefreshToken(
     user?._id
   );
 
+  // options for cookies
   const options = {
-    httpOnly : true,
-    secure : true
-  }
+    httpOnly: true,
+    secure: true,
+  };
 
+  // returning response and setting cookies to browser
   return res
     .status(200)
-    .cookie("accessToken", accessToken,options)
-    .cookie("refreshToken", refreshToken,options)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
     .json(new ApiResponse(200, {}, "Access token refreshed"));
 });
 
-export { registerUser, loginUser, logoutUser, refreshAccessToken };
+const changeCurrentPassword = asyncHandler(async (req, res) => {
+  // getting old password and new password from user
+  const { oldPassword, newPassword } = req.body;
+
+  if (!(oldPassword || newPassword)) {
+    throw new ApiError(400, "All fields are required");
+  }
+
+  const currentUser = await User.findById(req.user?._id);
+
+  if (!currentUser) {
+    throw new ApiError(404, "User not found");
+  }
+
+  const isPasswordCorrect = await currentUser.isPasswordCorrect(oldPassword);
+   
+  
+  if(!isPasswordCorrect){
+    throw new ApiError(400,"Incorrect Password");
+  }
+
+  currentUser.password = newPassword;
+
+  await currentUser.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, {}, "password changed successfully"));
+});
+
+
+
+export { registerUser, loginUser, logoutUser, refreshAccessToken,changeCurrentPassword};
