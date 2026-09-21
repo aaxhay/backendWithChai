@@ -1,3 +1,5 @@
+import { response } from "express";
+import { User } from "../models/user.models.js";
 import { Video } from "../models/video.models.js";
 import { ApiError } from "../utils/ApiError.js";
 import { ApiResponse } from "../utils/ApiResponse.js";
@@ -65,7 +67,7 @@ const uploadVideo = asyncHandler(async (req, res) => {
 
 const getAllVideos = asyncHandler(async (req, res) => {
   const allVideos = await Video.find();
-  
+
   if (allVideos.length === 0) {
     throw new ApiError(404, "No Videos as of now");
   }
@@ -74,4 +76,120 @@ const getAllVideos = asyncHandler(async (req, res) => {
     .json(new ApiResponse(200, allVideos, "All Videos Fetched"));
 });
 
-export { uploadVideo, getAllVideos };
+const deleteVideoById = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+
+  if (!videoId) {
+    throw new ApiError(404, "video id is required");
+  }
+
+  const videoById = await Video.findById(videoId);
+
+  if (!videoById) {
+    throw new ApiError(404, "Video doesn't exist");
+  }
+
+  if (videoById.owner?._id.toString() !== req.user?._id.toString()) {
+    throw new ApiError(401, "You are not authorized to deleted this video");
+  }
+
+  const deletedVideo = await Video.findByIdAndDelete(videoId);
+
+  if (!deleteVideoById) {
+    throw new ApiError(501, "Error while deleting the video");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, deletedVideo, "Video Deleted successfully"));
+});
+
+const getVideoById = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+
+  if (!videoId) {
+    throw new ApiError(404, "video id is required");
+  }
+
+  const videoById = await Video.findById(videoId);
+
+  if (!videoById) {
+    throw new ApiError(404, "Video doesn't exist");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, videoById, "Video Fetched successfully"));
+});
+
+const viewVideo = asyncHandler(async (req, res) => {
+  const { videoId } = req.params;
+
+  if (!videoId) {
+    throw new ApiError(404, "video id is required");
+  }
+
+  const videoById = await Video.findById(videoId);
+
+  if (!videoById) {
+    throw new ApiError(404, "Video doesn't exist");
+  }
+
+  const watchHistoryUpdated = await User.findByIdAndUpdate(req.user?._id, {
+    $push: {
+      watchHistory: videoById,
+    },
+  }).select("-password -refreshToken");
+
+  if (!watchHistoryUpdated) {
+    throw new ApiError(400, "Error while pushing video to watch history");
+  }
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, videoById, "Video watched successfully"));
+});
+
+const updateVideoDetails = asyncHandler(async (req, res) => {
+  // take the information via req.body;
+  const { title, description } = req.body;
+  const { videoId } = req.params;
+
+  //checking that these fields exists or not
+  if (!(title || description)) {
+    throw new ApiError(400, "All fields are required");
+  }
+
+  if (!videoId) throw new ApiError(400, "Video id is required");
+
+  const videoById = await Video.findById(videoId);
+
+  if (!videoById) throw new ApiError(404, "Video not Found");
+
+  // checking if user is authorized to make changes or update the file or not
+  if (videoById.owner?._id.toString() !== req.user?._id.toString()) {
+    throw new ApiError(401, "Not authorized to use this operation");
+  }
+
+  //we are query again or we can make changes to the existing videoById too
+  videoById.title = title;
+  videoById.description = description;
+  await videoById.save({ validateBeforeSave: false });
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponse(200, videoById, "Video Details Updated Successfully")
+    );
+});
+
+
+
+export {
+  uploadVideo,
+  getAllVideos,
+  viewVideo,
+  getVideoById,
+  deleteVideoById,
+  updateVideoDetails,
+};
